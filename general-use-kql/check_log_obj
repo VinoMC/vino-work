@@ -1,3 +1,7 @@
 search *
 | summarize Count = count() by Type
 | sort by Count desc
+
+.show tables
+
+* | take 10
