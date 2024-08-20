@@ -1,0 +1,6 @@
+#filter for last old devices; last contact 4 months ago
+
+IntuneDevices
+| extend LastContactTime = todatetime(LastContact)
+| where LastContactTime < ago(120d)
+| summarize arg_max(LastContactTime, *) by DeviceName
