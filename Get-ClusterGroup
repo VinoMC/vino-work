@@ -5,15 +5,17 @@ $vmData = Get-ClusterGroup | Where-Object {$_.GroupType -eq 'VirtualMachine'} | 
     $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue
 
     if ($vm) {
-        # Get vCPU info
-        $cpuCount = ($vm | Get-VMProcessor).Count
+        # Get vCPU count
+        $cpuCount = (Get-VMProcessor -VMName $vm.Name).Count
 
-        # Get VHDs attached to VM
-        $diskPaths = ($vm | Get-VMHardDiskDrive).Path -join "; "
+        # Get all VHD paths (joined with semicolon)
+        $diskPaths = (Get-VMHardDiskDrive -VMName $vm.Name | Select-Object -ExpandProperty Path) -join "; "
 
-        # Attempt to get OS name from guest (requires Guest Services and PS Remoting)
+        # Initialize OS Caption
         $osCaption = "Unavailable"
-        if ($vm.State -eq "Running") {
+
+        # Attempt to query guest OS if VM is running
+        if ($vm.State -eq 'Running') {
             try {
                 $osCaption = Invoke-Command -VMName $vm.Name -ScriptBlock {
                     (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
@@ -23,6 +25,21 @@ $vmData = Get-ClusterGroup | Where-Object {$_.GroupType -eq 'VirtualMachine'} | 
             }
         }
 
-        # Build output object
+        # Return custom object with all details
         [PSCustomObject]@{
-            VMName
+            VMName          = $vm.Name
+            State           = $vm.State
+            HostNode        = $ownerNode
+            CPUCount        = $cpuCount
+            MemoryAssigned  = $vm.MemoryAssigned
+            VHDPaths        = $diskPaths
+            OperatingSystem = $osCaption
+            Uptime          = $vm.Uptime
+        }
+    }
+}
+
+# Export to CSV
+$vmData | Export-Csv -Path "C:\VMs_On_Cluster_Detailed.csv" -NoTypeInformation
+
+Write-Output "✅ VM list exported to C:\VMs_On_Cluster_Detailed.csv"
