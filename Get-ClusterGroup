@@ -1,0 +1,28 @@
+# Collect VM info from the cluster
+$vmData = Get-ClusterGroup | Where-Object {$_.GroupType -eq 'VirtualMachine'} | ForEach-Object {
+    $vmName = $_.Name
+    $ownerNode = $_.OwnerNode.Name
+    $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue
+
+    if ($vm) {
+        # Get vCPU info
+        $cpuCount = ($vm | Get-VMProcessor).Count
+
+        # Get VHDs attached to VM
+        $diskPaths = ($vm | Get-VMHardDiskDrive).Path -join "; "
+
+        # Attempt to get OS name from guest (requires Guest Services and PS Remoting)
+        $osCaption = "Unavailable"
+        if ($vm.State -eq "Running") {
+            try {
+                $osCaption = Invoke-Command -VMName $vm.Name -ScriptBlock {
+                    (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
+                } -ErrorAction Stop
+            } catch {
+                $osCaption = "Access Denied or Not Available"
+            }
+        }
+
+        # Build output object
+        [PSCustomObject]@{
+            VMName
