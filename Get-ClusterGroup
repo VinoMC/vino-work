@@ -1,45 +1,38 @@
-# Collect VM info from the cluster
-$vmData = Get-ClusterGroup | Where-Object {$_.GroupType -eq 'VirtualMachine'} | ForEach-Object {
-    $vmName = $_.Name
-    $ownerNode = $_.OwnerNode.Name
-    $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue
+# Define the Hyper-V nodes
+$nodes = @("SRV-HV01", "SRV-HV02", "SRV-HV03")
 
-    if ($vm) {
-        # Get vCPU count
-        $cpuCount = (Get-VMProcessor -VMName $vm.Name).Count
+# Empty array to store all VM info
+$allVMs = @()
 
-        # Get all VHD paths (joined with semicolon)
-        $diskPaths = (Get-VMHardDiskDrive -VMName $vm.Name | Select-Object -ExpandProperty Path) -join "; "
+# Loop through each node and gather VM details
+foreach ($node in $nodes) {
+    Write-Host "Querying VMs on $node..." -ForegroundColor Cyan
 
-        # Initialize OS Caption
-        $osCaption = "Unavailable"
+    $vms = Invoke-Command -ComputerName $node -ScriptBlock {
+        $vmInfoList = @()
 
-        # Attempt to query guest OS if VM is running
-        if ($vm.State -eq 'Running') {
-            try {
-                $osCaption = Invoke-Command -VMName $vm.Name -ScriptBlock {
-                    (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
-                } -ErrorAction Stop
-            } catch {
-                $osCaption = "Access Denied or Not Available"
+        foreach ($vm in Get-VM) {
+            $vmHardDisks = Get-VMHardDiskDrive -VMName $vm.Name | Select-Object ControllerType, Path
+            $vmInfoList += [PSCustomObject]@{
+                HostNode         = $env:COMPUTERNAME
+                VMName           = $vm.Name
+                State            = $vm.State.ToString()
+                CPUCount         = $vm.ProcessorCount
+                MemoryAssignedMB = [math]::Round($vm.MemoryAssigned / 1MB, 0)
+                HardDisks        = ($vmHardDisks | ForEach-Object {
+                    "$($_.ControllerType): $($_.Path)"
+                }) -join "`n"
             }
         }
 
-        # Return custom object with all details
-        [PSCustomObject]@{
-            VMName          = $vm.Name
-            State           = $vm.State
-            HostNode        = $ownerNode
-            CPUCount        = $cpuCount
-            MemoryAssigned  = $vm.MemoryAssigned
-            VHDPaths        = $diskPaths
-            OperatingSystem = $osCaption
-            Uptime          = $vm.Uptime
-        }
+        return $vmInfoList
     }
+
+    $allVMs += $vms
 }
 
-# Export to CSV
-$vmData | Export-Csv -Path "C:\VMs_On_Cluster_Detailed.csv" -NoTypeInformation
+# Export the results to CSV
+$outputPath = "C:\VM_Inventory.csv"
+$allVMs | Export-Csv -Path $outputPath -NoTypeInformation -Encoding UTF8
 
-Write-Output "✅ VM list exported to C:\VMs_On_Cluster_Detailed.csv"
+Write-Host "`n✅ VM inventory exported to $outputPath" -ForegroundColor Green
