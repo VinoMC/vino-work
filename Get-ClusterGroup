@@ -35,4 +35,4 @@ foreach ($node in $nodes) {
 $outputPath = "C:\VM_Inventory.csv"
 $allVMs | Export-Csv -Path $outputPath -NoTypeInformation -Encoding UTF8
 
-Write-Host "`n✅ VM inventory exported to $outputPath" -ForegroundColor Green
+Write-Host "VM inventory exported to $outputPath" -ForegroundColor Green
