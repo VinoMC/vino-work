@@ -1,0 +1,38 @@
+# Define the Hyper-V nodes
+$nodes = @("SRV-HV01", "SRV-HV02", "SRV-HV03")
+
+# Empty array to store all VM info
+$allVMs = @()
+
+# Loop through each node and gather VM details
+foreach ($node in $nodes) {
+    Write-Host "Querying VMs on $node..." -ForegroundColor Cyan
+
+    $vms = Invoke-Command -ComputerName $node -ScriptBlock {
+        $vmInfoList = @()
+
+        foreach ($vm in Get-VM) {
+            $vmHardDisks = Get-VMHardDiskDrive -VMName $vm.Name | Select-Object ControllerType, Path
+            $vmInfoList += [PSCustomObject]@{
+                HostNode         = $env:COMPUTERNAME
+                VMName           = $vm.Name
+                State            = $vm.State.ToString()
+                CPUCount         = $vm.ProcessorCount
+                MemoryAssignedMB = [math]::Round($vm.MemoryAssigned / 1MB, 0)
+                HardDisks        = ($vmHardDisks | ForEach-Object {
+                    "$($_.ControllerType): $($_.Path)"
+                }) -join "`n"
+            }
+        }
+
+        return $vmInfoList
+    }
+
+    $allVMs += $vms
+}
+
+# Export the results to CSV
+$outputPath = "C:\VM_Inventory.csv"
+$allVMs | Export-Csv -Path $outputPath -NoTypeInformation -Encoding UTF8
+
+Write-Host "VM inventory exported to $outputPath" -ForegroundColor Green
