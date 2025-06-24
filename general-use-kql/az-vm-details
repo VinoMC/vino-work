@@ -1,0 +1,31 @@
+Resources
+| where type == "microsoft.compute/virtualmachines"
+| extend
+    vmName = name,
+    resourceGroup = resourceGroup,
+    location = location,
+    vmSize = tostring(properties.hardwareProfile.vmSize),
+    osType = tostring(properties.storageProfile.osDisk.osType),
+    osDiskSize = toint(properties.storageProfile.osDisk.diskSizeGb),
+    dataDisks = properties.storageProfile.dataDisks
+| extend dataDiskCount = array_length(dataDisks)
+| mv-expand dataDisks
+| extend dataDiskSize = toint(dataDisks.diskSizeGb)
+| summarize 
+    dataDiskTotalSize = sum(dataDiskSize)
+    by vmName, resourceGroup, location, osType, vmSize, osDiskSize, subscriptionId
+| union (
+    Resources
+    | where type == "microsoft.compute/virtualmachines"
+    | extend
+        vmName = name,
+        resourceGroup = resourceGroup,
+        location = location,
+        vmSize = tostring(properties.hardwareProfile.vmSize),
+        osType = tostring(properties.storageProfile.osDisk.osType),
+        osDiskSize = toint(properties.storageProfile.osDisk.diskSizeGb),
+        dataDisks = properties.storageProfile.dataDisks
+    | where isnull(dataDisks) or array_length(dataDisks) == 0
+    | extend dataDiskTotalSize = 0
+    | project vmName, resourceGroup, location, osType, vmSize, osDiskSize, dataDiskTotalSize, subscriptionId
+)
